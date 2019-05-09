@@ -31,7 +31,7 @@ struct vocab_mp{
 char train_file[MAX_STRING], output_file[MAX_STRING], mp_output_file[MAX_STRING], type_file[MAX_STRING], tag_file[MAX_STRING], lat_file[MAX_STRING], lon_file[MAX_STRING];
 struct vocab_word *vocab;
 struct vocab_mp *mp_vocab;
-int binary = 0, debug_mode = 2, window = 5, num_threads = 1, is_deepwalk = 1, no_circle = 1, static_win = 1;
+int binary = 0, debug_mode = 2,  num_threads = 1, is_deepwalk = 1, no_circle = 1, static_win = 1;
 int sigmoid_reg = 0, distance = 500;
 int *vocab_hash, *mp_vocab_hash, *node2type, *node2tag;
 long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 64;
@@ -333,7 +333,7 @@ void LearnMpVocabFromTrainFile() {
 
         for (long long j=0; j<ith; j++) {
             mp = path[j];
-            for (long long k=0; k<window; k++) {
+            for (long long k=0; k<3; k++) { // 3 in here is window size
                 if (j+k >= ith) break;
                 if (k != 0) {
                     strcat(mp, path[j+k]);
@@ -614,10 +614,22 @@ void *TrainModelThread(void *id) {
         // learning
         // node_length为node_seq的大小，node_seq存储了一行random walk中node的索引
         for (a=0; a<node_length; a++) {
-            cur_win = window;
+            real lat1 = node2lat[node_seq[a]];
+            real lon1 = node2lon[node_seq[a]];
+            long long w_cursor;
+            int dis_from_a = 0;
+            for (w_cursor=a; w_cursor<node_length; w_cursor++){
+                real lat2 = node2lat[node_seq[w_cursor]];
+                real lon2 = node2lon[node_seq[w_cursor]];
+                int dis = CalcDistance(lat1, lon1, lat2, lon2);
+                dis_from_a += dis;
+                if (dis_from_a > distance) break;
+            }
+
+            cur_win = w_cursor - 1;
             if (static_win == 0) {
                 next_random = next_random * (unsigned long long)25214903917 + 11;
-                cur_win = next_random % window; // random a window length for this sentence
+                cur_win = next_random % 3; // random a window length for this sentence, 3 is window size
             }
             for (w=1; w<=cur_win; w++) {
                 if (a+w >= node_length) continue;
@@ -858,85 +870,85 @@ void *TrainModelThread(void *id) {
 
                 //Learn by node distance relationship
 
-                context = node_seq[a+w];
-                mp_index = 0;
-
-                real lat1 = node2lat[target];
-                real lon1 = node2lon[target];
-
-                next_random = next_random * (unsigned long long)25214903917 + 11;
-                for (d = 0; d < negative + 1; d++) {
-                    if (d == 0) {
-                        label = 0;
-                        real lat2 = node2lat[context];
-                        real lon2 = node2lon[context];
-                        int dis = CalcDistance(lat1, lon1, lat2, lon2);
-                        if (dis <= distance) label = 1;
-                        // negative sampling
-                    } else {
-                        next_random = next_random * (unsigned long long)25214903917 + 11;
-                        context = table[(next_random >> 16) % table_size];
-                        if (context == 0) context = next_random % (vocab_size - 1) + 1;
-                        if (context == target || context == node_seq[a+w]) continue;
-                        label = 0;
-                        real lat2 = node2lat[context];
-                        real lon2 = node2lon[context];
-                        int dis = CalcDistance(lat1, lon1, lat2, lon2);
-                        if (dis <= distance) label = 1;
-                    }
-
-                    // training of a data
-                    lx = target * layer1_size;
-                    ly = context * layer1_size;
-                    lr = mp_index * layer1_size;
-                    for (c = 0; c < layer1_size; c++) ex[c] = 0;
-                    for (c = 0; c < layer1_size; c++) er[c] = 0;
-
-                    f = 0;
-                    for (c = 0; c < layer1_size; c++) {
-                        if (sigmoid_reg) {
-                            if (synmp[c + lr] > MAX_EXP) f += syn0[c + lx] * syn0[c + ly];
-                            else if (synmp[c + lr] < -MAX_EXP) continue;
-                            else f += syn0[c + lx] * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        } else {
-                            if (synmp[c + lr] >= 0) f += syn0[c + lx] * syn0[c + ly];
-                        }
-                    }
-                    if (f > MAX_EXP) g = (label - 1) * alpha;
-                    else if (f < -MAX_EXP) g = (label - 0) * alpha;
-                    else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
-
-                    g = g * (1.0 - beta);
-
-                    // update
-                    for (c = 0; c < layer1_size; c++) {
-                        if (sigmoid_reg) {
-                            if (synmp[c + lr] > MAX_EXP) ex[c] = g * syn0[c + ly];
-                            else if (synmp[c + lr] < -MAX_EXP) continue;
-                            else ex[c] = g * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        } else {
-                            if (synmp[c + lr] >= 0) ex[c] = g * syn0[c + ly];
-                        }
-                    }
-                    for (c = 0; c < layer1_size; c++) {
-                        f = synmp[c + lr];
-                        if (f > MAX_EXP || f < -MAX_EXP) continue;
-                        sigmoid = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        er[c] = g * syn0[c + lx] * syn0[c + ly] * sigmoid * (1-sigmoid);
-                    }
-                    for (c = 0; c < layer1_size; c++) {
-                        if (sigmoid_reg) {
-                            if (synmp[c + lr] > MAX_EXP) syn0[c + ly] += g * syn0[c + lx];
-                            else if (synmp[c + lr] < -MAX_EXP) continue;
-                            else syn0[c + ly] += g * syn0[c + lx] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        } else {
-                            if (synmp[c + lr] >= 0) syn0[c + ly] += g * syn0[c + lx];
-                        }
-                    }
-                    for (c = 0; c < layer1_size; c++) syn0[c + lx] += ex[c];
-
-                    if (is_deepwalk == 0) {for (c = 0; c < layer1_size; c++) synmp[c + lr] += er[c];}
-                }
+//                context = node_seq[a+w];
+//                mp_index = 0;
+//
+//                real lat1 = node2lat[target];
+//                real lon1 = node2lon[target];
+//
+//                next_random = next_random * (unsigned long long)25214903917 + 11;
+//                for (d = 0; d < negative + 1; d++) {
+//                    if (d == 0) {
+//                        label = 0;
+//                        real lat2 = node2lat[context];
+//                        real lon2 = node2lon[context];
+//                        int dis = CalcDistance(lat1, lon1, lat2, lon2);
+//                        if (dis <= distance) label = 1;
+//                        // negative sampling
+//                    } else {
+//                        next_random = next_random * (unsigned long long)25214903917 + 11;
+//                        context = table[(next_random >> 16) % table_size];
+//                        if (context == 0) context = next_random % (vocab_size - 1) + 1;
+//                        if (context == target || context == node_seq[a+w]) continue;
+//                        label = 0;
+//                        real lat2 = node2lat[context];
+//                        real lon2 = node2lon[context];
+//                        int dis = CalcDistance(lat1, lon1, lat2, lon2);
+//                        if (dis <= distance) label = 1;
+//                    }
+//
+//                    // training of a data
+//                    lx = target * layer1_size;
+//                    ly = context * layer1_size;
+//                    lr = mp_index * layer1_size;
+//                    for (c = 0; c < layer1_size; c++) ex[c] = 0;
+//                    for (c = 0; c < layer1_size; c++) er[c] = 0;
+//
+//                    f = 0;
+//                    for (c = 0; c < layer1_size; c++) {
+//                        if (sigmoid_reg) {
+//                            if (synmp[c + lr] > MAX_EXP) f += syn0[c + lx] * syn0[c + ly];
+//                            else if (synmp[c + lr] < -MAX_EXP) continue;
+//                            else f += syn0[c + lx] * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        } else {
+//                            if (synmp[c + lr] >= 0) f += syn0[c + lx] * syn0[c + ly];
+//                        }
+//                    }
+//                    if (f > MAX_EXP) g = (label - 1) * alpha;
+//                    else if (f < -MAX_EXP) g = (label - 0) * alpha;
+//                    else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
+//
+//                    g = g * (1.0 - beta);
+//
+//                    // update
+//                    for (c = 0; c < layer1_size; c++) {
+//                        if (sigmoid_reg) {
+//                            if (synmp[c + lr] > MAX_EXP) ex[c] = g * syn0[c + ly];
+//                            else if (synmp[c + lr] < -MAX_EXP) continue;
+//                            else ex[c] = g * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        } else {
+//                            if (synmp[c + lr] >= 0) ex[c] = g * syn0[c + ly];
+//                        }
+//                    }
+//                    for (c = 0; c < layer1_size; c++) {
+//                        f = synmp[c + lr];
+//                        if (f > MAX_EXP || f < -MAX_EXP) continue;
+//                        sigmoid = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        er[c] = g * syn0[c + lx] * syn0[c + ly] * sigmoid * (1-sigmoid);
+//                    }
+//                    for (c = 0; c < layer1_size; c++) {
+//                        if (sigmoid_reg) {
+//                            if (synmp[c + lr] > MAX_EXP) syn0[c + ly] += g * syn0[c + lx];
+//                            else if (synmp[c + lr] < -MAX_EXP) continue;
+//                            else syn0[c + ly] += g * syn0[c + lx] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        } else {
+//                            if (synmp[c + lr] >= 0) syn0[c + ly] += g * syn0[c + lx];
+//                        }
+//                    }
+//                    for (c = 0; c < layer1_size; c++) syn0[c + lx] += ex[c];
+//
+//                    if (is_deepwalk == 0) {for (c = 0; c < layer1_size; c++) synmp[c + lr] += er[c];}
+//                }
             }
         }
     }
@@ -1055,7 +1067,7 @@ int main(int argc, char **argv) {
         printf("\t-lon_file <file>\n");
         printf("\t\tNode longitude file, format of line is '<node_id> <longitude_value>'\n");
         printf("\t-distance <int>\n");
-        printf("\t\tthe distance want to learning? default is 500.\n");
+        printf("\t\tthe distance want to learning? default is 500. distance equal to window width\n");
         printf("\t-alpha <float>\n");
         printf("\t\tSet the starting learning rate; default is 0.025\n");
         printf("\t-beta <float>\n");
@@ -1064,8 +1076,6 @@ int main(int argc, char **argv) {
         printf("\t\tUse <file> to save the resulting node vectors\n");
         printf("\t-output_mp <file>\n");
         printf("\t\tUse <file> to save the resulting meta-path vectors\n");
-        printf("\t-window <int>\n");
-        printf("\t\tSet max hop number of meta-paths between nodes; default is 3\n");
         printf("\t-negative <int>\n");
         printf("\t\tNumber of negative examples; default is 0, common values are 5 - 10 (0 = not used)\n");
         printf("\t-threads <int>\n");
@@ -1075,7 +1085,7 @@ int main(int argc, char **argv) {
         printf("\t-no_circle <1/0>\n");
         printf("\t\tSet to agoid circles in paths when preparing training data (default 1: avoid)\n");
         printf("\nExamples:\n");
-        printf("./road2vec -train data.txt -lat_file lat.txt -lon_file lon.txt -output vec.txt -output_mp mp.txt -size 128 -window 5 -negative 5\n\n");
+        printf("./road2vec -train data.txt -lat_file lat.txt -lon_file lon.txt -output vec.txt -output_mp mp.txt -size 128 -distance 500 -negative 5\n\n");
         return 0;
     }
     output_file[0] = 0;
@@ -1090,7 +1100,6 @@ int main(int argc, char **argv) {
     if ((i = ArgPos((char *)"-beta", argc, argv)) > 0) beta = atof(argv[i + 1]);
     if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
     if ((i = ArgPos((char *)"-output_mp", argc, argv)) > 0) strcpy(mp_output_file, argv[i + 1]);
-    if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-no_circle", argc, argv)) > 0) no_circle = atoi(argv[i + 1]);
