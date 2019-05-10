@@ -446,6 +446,7 @@ void LoadLatFromLatFile() {
         node2lat[i] = atof(latitude);
 //        printf("node:%s(%d) type:%d\n", word, i, atoi(type));
     }
+
     fclose(fin);
 }
 
@@ -614,8 +615,15 @@ void *TrainModelThread(void *id) {
         // learning
         // node_length为node_seq的大小，node_seq存储了一行random walk中node的索引
         for (a=0; a<node_length; a++) {
-            real lat1 = node2lat[node_seq[a]];
-            real lon1 = node2lon[node_seq[a]];
+            printf("111111111111111111! \n");
+            long long tmp = node_seq[a];
+            real lat1 = node2lat[tmp];
+            real lon1 = node2lon[tmp];
+            for (int _tmp=0;_tmp<10;_tmp++){
+                printf("lat: %f \n", node2lat[_tmp]);
+                printf("tag: %d \n", node2tag[_tmp]);
+                printf("type: %d \n", node2type[_tmp]);
+            }
             long long w_cursor;
             int dis_from_a = 0;
             for (w_cursor=a; w_cursor<node_length; w_cursor++){
@@ -625,8 +633,9 @@ void *TrainModelThread(void *id) {
                 dis_from_a += dis;
                 if (dis_from_a > distance) break;
             }
+            cur_win = w_cursor - a;
+            printf("cur_win is:%lld \n", cur_win);
 
-            cur_win = w_cursor - 1;
             if (static_win == 0) {
                 next_random = next_random * (unsigned long long)25214903917 + 11;
                 cur_win = next_random % 3; // random a window length for this sentence, 3 is window size
@@ -644,7 +653,7 @@ void *TrainModelThread(void *id) {
                     }
                     if (has_circle) continue;
                 }
-
+                printf("2222222222222222222 \n");
                 //Learn by co-occurrence relationship
                 mp = edge_seq[a];
                 for (b=1; b<w; b++) {strcat(mp, edge_seq[a+b]);}
@@ -1109,8 +1118,8 @@ int main(int argc, char **argv) {
     vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
     node2type = (int *)calloc(vocab_hash_size, sizeof(int));
     node2tag = (int *)calloc(vocab_hash_size, sizeof(int));
-    node2lat = (int *)calloc(vocab_hash_size, sizeof(real));
-    node2lon = (int *)calloc(vocab_hash_size, sizeof(real));
+    node2lat = (real *)calloc(vocab_hash_size, sizeof(real));
+    node2lon = (real *)calloc(vocab_hash_size, sizeof(real));
     mp_vocab = (struct vocab_mp*)calloc(mp_vocab_max_size, sizeof(struct vocab_mp));
     mp_vocab_hash = (int *)calloc(mp_vocab_hash_size, sizeof(int));
 
