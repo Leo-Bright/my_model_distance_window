@@ -615,15 +615,9 @@ void *TrainModelThread(void *id) {
         // learning
         // node_length为node_seq的大小，node_seq存储了一行random walk中node的索引
         for (a=0; a<node_length; a++) {
-            printf("111111111111111111! \n");
             long long tmp = node_seq[a];
             real lat1 = node2lat[tmp];
             real lon1 = node2lon[tmp];
-            for (int _tmp=0;_tmp<10;_tmp++){
-                printf("lat: %f \n", node2lat[_tmp]);
-                printf("tag: %d \n", node2tag[_tmp]);
-                printf("type: %d \n", node2type[_tmp]);
-            }
             long long w_cursor;
             int dis_from_a = 0;
             for (w_cursor=a; w_cursor<node_length; w_cursor++){
@@ -653,7 +647,6 @@ void *TrainModelThread(void *id) {
                     }
                     if (has_circle) continue;
                 }
-                printf("2222222222222222222 \n");
                 //Learn by co-occurrence relationship
                 mp = edge_seq[a];
                 for (b=1; b<w; b++) {strcat(mp, edge_seq[a+b]);}
@@ -705,12 +698,12 @@ void *TrainModelThread(void *id) {
                             if (synmp[c + lr] >= 0) ex[c] = g * syn0[c + ly];
                         }
                     }
-                    for (c = 0; c < layer1_size; c++) {
-                        f = synmp[c + lr];
-                        if (f > MAX_EXP || f < -MAX_EXP) continue;
-                        sigmoid = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        er[c] = g * syn0[c + lx] * syn0[c + ly] * sigmoid * (1-sigmoid);
-                    }
+//                    for (c = 0; c < layer1_size; c++) {
+//                        f = synmp[c + lr];
+//                        if (f > MAX_EXP || f < -MAX_EXP) continue;
+//                        sigmoid = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        er[c] = g * syn0[c + lx] * syn0[c + ly] * sigmoid * (1-sigmoid);
+//                    }
                     for (c = 0; c < layer1_size; c++) {
                         if (sigmoid_reg) {
                             if (synmp[c + lr] > MAX_EXP) syn0[c + ly] += g * syn0[c + lx];
@@ -723,6 +716,7 @@ void *TrainModelThread(void *id) {
                     for (c = 0; c < layer1_size; c++) syn0[c + lx] += ex[c];
 
                     if (is_deepwalk == 0) {for (c = 0; c < layer1_size; c++) synmp[c + lr] += er[c];}
+
                 }
 
                 //Learn by same node type relationship
