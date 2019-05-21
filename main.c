@@ -338,7 +338,7 @@ void LearnMpVocabFromTrainFile() {
                 if (k != 0) {
                     strcat(mp, path[j+k]);
                 }
-//      printf("mp %s\n", mp);
+
 
                 train_mps++;
                 if ((debug_mode > 1) && (train_mps% 100000 == 0)) {
@@ -527,7 +527,7 @@ void DestroyNet() {
 void *TrainModelThread(void *id) {
     long long a, b, d, w, cur_win, word, node_length = 0;
     long long mp_index, edge_length = 0;
-    char *mp = "";
+    char *mp;
     long long rw_length = 0;
     char item[MAX_STRING];
     char rw[MAX_RW_LENGTH][MAX_STRING], edge_seq[MAX_RW_LENGTH][MAX_STRING];
@@ -550,7 +550,6 @@ void *TrainModelThread(void *id) {
     }
     printf("File total size:%lld, Pid is:%lld, file_position:%lld \n",file_size, (long long)id, file_size / (long long)num_threads * (long long)id);
     fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET); //多线程读文件的位置定位 （id为是线程id）
-
     while (1) {
         if (word_count - last_word_count > 10000) {
             word_count_actual += word_count - last_word_count;
@@ -614,6 +613,7 @@ void *TrainModelThread(void *id) {
 
         // learning
         // node_length为node_seq的大小，node_seq存储了一行random walk中node的索引
+
         for (a=0; a<node_length; a++) {
             long long tmp = node_seq[a];
             real lat1 = node2lat[tmp];
@@ -627,14 +627,16 @@ void *TrainModelThread(void *id) {
                 dis_from_a += dis;
                 if (dis_from_a > distance) break;
             }
+
             cur_win = w_cursor - a;
-            printf("cur_win is:%lld \n", cur_win);
+
 
             if (static_win == 0) {
                 next_random = next_random * (unsigned long long)25214903917 + 11;
                 cur_win = next_random % 3; // random a window length for this sentence, 3 is window size
             }
             for (w=1; w<=cur_win; w++) {
+
                 if (a+w >= node_length) continue;
                 target = node_seq[a];//x
                 context = node_seq[a+w];//y
@@ -647,11 +649,14 @@ void *TrainModelThread(void *id) {
                     }
                     if (has_circle) continue;
                 }
+
                 //Learn by co-occurrence relationship
                 mp = edge_seq[a];
-                for (b=1; b<w; b++) {strcat(mp, edge_seq[a+b]);}
+
+//                for (b=1; b<w; b++) {strcat(mp, edge_seq[a+b]);}
 
                 mp_index = SearchMpVocab(mp);
+
 
                 next_random = next_random * (unsigned long long)25214903917 + 11;
                 for (d = 0; d < negative + 1; d++) {
@@ -794,7 +799,6 @@ void *TrainModelThread(void *id) {
 
                     if (is_deepwalk == 0) {for (c = 0; c < layer1_size; c++) synmp[c + lr] += er[c];}
                 }
-
 
                 //Learn by same node tag relationship
 
