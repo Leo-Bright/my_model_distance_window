@@ -312,7 +312,8 @@ void LearnMpVocabFromTrainFile() {
     mp_vocab_size = 0;
     long long ith=0;
     int is_edge = 0;
-    while (1) {
+    int line = 0;
+    while (line < 1) {
         ReadWord(edge, fin);
         if (feof(fin)) break;
         if (strcmp(edge, "\n") != 0) {
@@ -354,6 +355,7 @@ void LearnMpVocabFromTrainFile() {
         }
         is_edge = 0;
         ith = 0;
+        line++;
     }
 
     SortMpVocab();
