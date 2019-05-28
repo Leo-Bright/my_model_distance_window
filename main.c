@@ -39,7 +39,7 @@ long long mp_vocab_max_size = 1000, mp_vocab_size = 0;
 long long train_words = 0, file_size = 0;
 long long train_mps = 0;
 real alpha = 0.025, starting_alpha, last_alpha = 0;
-real beta = 0.9;
+real beta = 0.8, gama = 0.1;
 real *syn0, *syn1neg, *synmp, *expTable, *node2lat, *node2lon;
 clock_t start;
 
@@ -770,7 +770,7 @@ void *TrainModelThread(void *id) {
                     else if (f < -MAX_EXP) g = (label - 0) * alpha;
                     else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
 
-                    g = g * (1.0 - beta);
+                    g = g * gama;
 
                     // update
                     for (c = 0; c < layer1_size; c++) {
@@ -845,7 +845,7 @@ void *TrainModelThread(void *id) {
                     else if (f < -MAX_EXP) g = (label - 0) * alpha;
                     else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
 
-                    g = g * (1.0 - beta);
+                    g = g * (1.0 - beta - gama);
 
                     // update
                     for (c = 0; c < layer1_size; c++) {
@@ -1025,6 +1025,7 @@ int main(int argc, char **argv) {
     if ((i = ArgPos((char *)"-distance", argc, argv)) > 0) distance = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
     if ((i = ArgPos((char *)"-beta", argc, argv)) > 0) beta = atof(argv[i + 1]);
+    if ((i = ArgPos((char *)"-gama", argc, argv)) > 0) gama = atof(argv[i + 1]);
     if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
     if ((i = ArgPos((char *)"-output_mp", argc, argv)) > 0) strcpy(mp_output_file, argv[i + 1]);
     if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
