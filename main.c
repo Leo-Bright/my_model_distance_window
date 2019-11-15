@@ -622,12 +622,14 @@ void *TrainModelThread(void *id) {
             real lon1 = node2lon[tmp];
             long long w_cursor;
             int dis_from_a = 0;
-            for (w_cursor=a; w_cursor<node_length; w_cursor++){
+            for (w_cursor=a + 1; w_cursor<node_length; w_cursor++){
                 real lat2 = node2lat[node_seq[w_cursor]];
                 real lon2 = node2lon[node_seq[w_cursor]];
                 int dis = CalcDistance(lat1, lon1, lat2, lon2);
                 dis_from_a += dis;
                 if (dis_from_a > distance) break;
+                lat1 = lat2;
+                lon1 = lon2;
             }
 
             cur_win = w_cursor - a;
